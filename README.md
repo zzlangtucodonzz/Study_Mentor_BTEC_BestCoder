@@ -5,7 +5,6 @@
 # 🎓 Study Mentor — Your AI Study Companion
 ### *Next-Generation Multimodal AI Educational Assistant with Real-Time Vision & RPG Gamification*
 
-[![Best Coder 2026](https://img.shields.io/badge/Competition-Best%20Coder%202026-FFA500?style=for-the-badge&logo=target)](https://github.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![CameraX](https://img.shields.io/badge/CameraX-1.4.1-34A853?style=for-the-badge&logo=googlecamera&logoColor=white)](https://developer.android.com/training/camerax)
@@ -91,17 +90,6 @@ In modern education, students often encounter conceptual bottlenecks while doing
 - **Chat Session Persistence**: All discussions, attached image references, and AI responses are preserved in Firestore under user-specific sub-collections.
 - **Library History Viewer**: Browse and reload past study sessions to review step-by-step solutions before exams.
 - **Custom Profile**: Manage authentication, update student credentials, and choose custom profile avatars.
-
----
-
-## 📸 Application Preview
-
-| 🏠 Home & Stats | 📷 Live Scanner & Viewfinder | ✍️ Daily Practice Quiz | 👤 Profile & RPG Rank |
-| :---: | :---: | :---: | :---: |
-| <img src="art/screenshots/screenshot_home.png" width="220" alt="Home Dashboard" /> | <img src="art/screenshots/screenshot_scanner.png" width="220" alt="AI Camera Scanner" /> | <img src="art/screenshots/screenshot_practice.png" width="220" alt="Practice Quiz" /> | <img src="art/screenshots/screenshot_profile.png" width="220" alt="Student Profile" /> |
-| *Level progress & daily challenges* | *Resizable crop box & instant solve* | *Interactive STEM problem solving* | *RPG title & account statistics* |
-
-*(Place screenshots inside `art/screenshots/` to display live previews)*
 
 ---
 
@@ -241,23 +229,5 @@ To protect proprietary keys from leaking into version control, Study Mentor empl
 - **Runtime Authorization**: The custom client reads `BuildConfig.AI_API_KEY` directly when constructing the `Authorization: Bearer <TOKEN>` header.
 
 ---
-
-## 🏆 Best Coder 2026 Highlights
-
-| Dimension | Engineering Implementation |
-| :--- | :--- |
-| **Advanced CameraX & Canvas** | Dynamic `CompositingStrategy.Offscreen` punch-out mask with interactive touch-drag boundary clamping. |
-| **Zero-Latency AI Streaming** | Custom SSE chunk stream parsing directly from `HttpURLConnection` on `Dispatchers.IO`. |
-| **Robust Error Resilience** | Safe sample-size image downsampling preventing `OutOfMemoryError` even on 48MP+ sensors. |
-| **Edge-to-Edge Fluidity** | Full `WindowInsets` IME keyboard padding compensation avoiding UI overlap on all Android aspect ratios. |
-| **Full Lifecycle Hygiene** | Camera provider binding tied to `LocalLifecycleOwner`, safely releasing camera hardware upon pause. |
-
----
-
-<div align="center">
-
-**Built with passion for the Best Coder 2026 Competition 🚀**  
-*Study Mentor — Smart Learning Made Simple.*
-
 </div>
 
