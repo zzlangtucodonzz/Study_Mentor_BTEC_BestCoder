@@ -12,10 +12,14 @@ import com.example.study_mentor.OpenAIApiClient
 import com.example.study_mentor.data.ChatMessage
 import com.example.study_mentor.data.ChatSession
 import com.example.study_mentor.data.FirestoreChatRepository
+import com.example.study_mentor.data.GamificationRepository
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -34,6 +38,7 @@ typealias ChatMessage = com.example.study_mentor.data.ChatMessage
  * @param selectedImageUri    URI of the image chosen from gallery for preview.
  * @param selectedImageBase64 Compressed Base64 representation of the selected image.
  * @param currentSessionId    ID of the active Firestore chat session, or null if new.
+ * @param inputText           Current user query draft in the chat input field.
  */
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -41,20 +46,44 @@ data class ChatUiState(
     val errorMessage: String? = null,
     val selectedImageUri: Uri? = null,
     val selectedImageBase64: String? = null,
-    val currentSessionId: String? = null
+    val currentSessionId: String? = null,
+    val inputText: String = ""
 )
 
 // ─── ViewModel ───────────────────────────────────────────────────────────────
 
 class ChatViewModel(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
-    private val repository: FirestoreChatRepository = FirestoreChatRepository()
+    private val repository: FirestoreChatRepository = FirestoreChatRepository(),
+    private val gamificationRepository: GamificationRepository = GamificationRepository()
 ) : ViewModel() {
+
+    companion object {
+        const val DEFAULT_IMAGE_PROMPT = "Solve this math problem step-by-step and explain the concepts."
+    }
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    // Shared flow for triggering camera capture from external UI controls (e.g., MainScreen center FAB)
+    private val _captureTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val captureTrigger: SharedFlow<Unit> = _captureTrigger.asSharedFlow()
+
     private var isStreaming = false
+
+    /**
+     * Triggers a CameraX photo capture request in CameraScannerScreen.
+     */
+    fun triggerCameraCapture() {
+        _captureTrigger.tryEmit(Unit)
+    }
+
+    /**
+     * Updates the current input text query.
+     */
+    fun onInputTextChanged(text: String) {
+        _uiState.update { it.copy(inputText = text) }
+    }
 
     /**
      * Loads an existing chat session's messages from Firestore.
@@ -79,7 +108,8 @@ class ChatViewModel(
                 messages = emptyList(),
                 errorMessage = null,
                 selectedImageUri = null,
-                selectedImageBase64 = null
+                selectedImageBase64 = null,
+                inputText = ""
             )
         }
     }
@@ -115,7 +145,7 @@ class ChatViewModel(
     /**
      * Safely reads, downsamples, scales (max 1024x1024), and compresses an image to JPEG 80%.
      */
-    private fun processAndCompressImage(context: Context, uri: Uri): String? {
+    fun processAndCompressImage(context: Context, uri: Uri): String? {
         val resolver = context.contentResolver
 
         // 1. Decode bounds first to calculate inSampleSize and prevent OutOfMemory (OOM)
@@ -177,25 +207,92 @@ class ChatViewModel(
     }
 
     /**
+     * One-tap image dispatch: receives a captured/cropped image URI and user prompt (or default prompt),
+     * immediately displays the user message bubble in the UI, compresses the image on IO, and streams
+     * the AI response.
+     */
+    fun sendImagePrompt(context: Context, imageUri: Uri, prompt: String? = null) {
+        if (isStreaming) return
+
+        val trimmedPrompt = (prompt ?: _uiState.value.inputText).trim()
+        val effectivePrompt = if (trimmedPrompt.isBlank()) {
+            DEFAULT_IMAGE_PROMPT
+        } else {
+            trimmedPrompt
+        }
+
+        // Set the selected image URI and clear input text draft
+        _uiState.update {
+            it.copy(
+                selectedImageUri = imageUri,
+                selectedImageBase64 = null,
+                inputText = ""
+            )
+        }
+
+        val bubbleText = "[Image attached]\n$effectivePrompt"
+        val userMessage = ChatMessage(
+            role = "user",
+            text = bubbleText,
+            timestamp = System.currentTimeMillis()
+        )
+
+        // Show user message and thinking indicator right away
+        _uiState.update { current ->
+            current.copy(
+                messages = current.messages + userMessage,
+                isLoading = true,
+                errorMessage = null
+            )
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val base64 = try {
+                processAndCompressImage(context, imageUri)
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Failed to compress image in sendImagePrompt", e)
+                null
+            }
+
+            _uiState.update { it.copy(selectedImageBase64 = base64) }
+
+            executeAiStream(effectivePrompt, base64)
+        }
+    }
+
+    /**
      * Sends a user prompt to the AI and streams the reply token-by-token
      * into the UI state in real time, persisting messages to Cloud Firestore.
      *
-     * @param prompt  The question or instruction typed by the user.
+     * @param prompt The question or instruction typed by the user. If null, the active
+     *               [ChatUiState.inputText] is used. If blank and an image is attached
+     *               ("Lazy User" flow), [DEFAULT_IMAGE_PROMPT] is automatically assigned.
      */
-    fun sendMessage(prompt: String) {
+    fun sendMessage(prompt: String? = null) {
+        val rawPrompt = prompt ?: _uiState.value.inputText
+        val trimmedPrompt = rawPrompt.trim()
         val base64ToSend = _uiState.value.selectedImageBase64
-        val trimmedPrompt = prompt.trim()
+        val hasImage = base64ToSend != null || _uiState.value.selectedImageUri != null
 
-        if ((trimmedPrompt.isBlank() && base64ToSend == null) || isStreaming) return
+        // "Lazy User" logic: If an image is selected/captured but prompt is empty,
+        // automatically assign the default math solving prompt.
+        val effectivePrompt = if (trimmedPrompt.isBlank() && hasImage) {
+            DEFAULT_IMAGE_PROMPT
+        } else {
+            trimmedPrompt
+        }
 
-        // Clear thumbnail immediately from the input area
+        if ((effectivePrompt.isBlank() && base64ToSend == null) || isStreaming) return
+
+        // Clear active text input and thumbnail immediately from the input area
+        _uiState.update { it.copy(inputText = "") }
         clearSelectedImage()
 
         // Optional UI tweak: Indicate in chat history that an image was attached
         val bubbleText = if (base64ToSend != null) {
-            if (trimmedPrompt.isNotBlank()) "[Image attached]\n$trimmedPrompt" else "[Image attached]"
+            if (effectivePrompt.isNotBlank()) "[Image attached]\n$effectivePrompt" else "[Image attached]"
         } else {
-            trimmedPrompt
+            effectivePrompt
         }
 
         // 1. Immediately append the user message and start the thinking indicator
@@ -213,124 +310,142 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
-            isStreaming = true
-            var isFirstChunk = true
-            val responseBuilder = StringBuilder()
-            val uid = auth.currentUser?.uid
+            executeAiStream(effectivePrompt, base64ToSend)
+        }
+    }
 
-            // Auto-create a session in Firestore if currentSessionId is null
-            var activeSessionId = _uiState.value.currentSessionId
-            if (activeSessionId == null && uid != null) {
-                try {
-                    val sessionTitle = if (trimmedPrompt.isNotBlank()) {
-                        trimmedPrompt.split("\\s+".toRegex()).take(5).joinToString(" ")
-                    } else {
-                        "New Image Chat"
-                    }
-                    activeSessionId = repository.createNewSession(uid, sessionTitle)
-                    _uiState.update { it.copy(currentSessionId = activeSessionId) }
-                } catch (e: Exception) {
-                    Log.e("ChatViewModel", "Failed to create session in Firestore", e)
-                }
-            }
+    /**
+     * Core streaming orchestration: creates/updates Firestore session, logs messages,
+     * awards XP, and streams tokens from OpenAI into the StateFlow.
+     */
+    private suspend fun executeAiStream(effectivePrompt: String, base64ToSend: String?) {
+        isStreaming = true
+        var isFirstChunk = true
+        val responseBuilder = StringBuilder()
+        val uid = auth.currentUser?.uid
 
-            // Save user message to Firestore
-            if (uid != null && activeSessionId != null) {
-                try {
-                    repository.saveMessage(uid, activeSessionId, userMessage)
-                } catch (e: Exception) {
-                    Log.e("ChatViewModel", "Failed to save user message to Firestore", e)
-                }
-            }
-
+        // Auto-create a session in Firestore if currentSessionId is null
+        var activeSessionId = _uiState.value.currentSessionId
+        if (activeSessionId == null && uid != null) {
             try {
-                // 2. Collect streaming text chunks directly as Flow<String> (with optional image)
-                OpenAIApiClient.askQuestion(trimmedPrompt, base64ToSend)
-                    .collect { chunkText ->
-                        // Strip asterisks so raw Markdown doesn't leak into the UI
-                        val cleanDelta = chunkText.replace("*", "")
-                        if (cleanDelta.isEmpty()) return@collect
-
-                        responseBuilder.append(cleanDelta)
-                        val accumulatedText = responseBuilder.toString()
-
-                        if (isFirstChunk) {
-                            isFirstChunk = false
-                            // First token received: dismiss the thinking spinner and append the AI bubble
-                            val aiMessage = ChatMessage(
-                                role = "ai",
-                                text = accumulatedText,
-                                timestamp = System.currentTimeMillis()
-                            )
-                            _uiState.update { current ->
-                                current.copy(
-                                    messages = current.messages + aiMessage,
-                                    isLoading = false
-                                )
-                            }
-                        } else {
-                            // Subsequent chunks: update the AI bubble text character-by-character
-                            _uiState.update { current ->
-                                if (current.messages.isEmpty()) return@update current
-                                val updatedList = current.messages.toMutableList()
-                                val lastIndex = updatedList.lastIndex
-                                updatedList[lastIndex] = updatedList[lastIndex].copy(text = accumulatedText)
-                                current.copy(messages = updatedList)
-                            }
-                        }
-                    }
-
-                // If the stream finished without emitting any tokens
-                if (isFirstChunk) {
-                    val emptyNotice = ChatMessage(
-                        role = "ai",
-                        text = "Sorry, I received an empty response. Please try again.",
-                        timestamp = System.currentTimeMillis()
-                    )
-                    _uiState.update { current ->
-                        current.copy(
-                            messages = current.messages + emptyNotice,
-                            isLoading = false
-                        )
-                    }
+                val sessionTitle = if (effectivePrompt.isNotBlank()) {
+                    effectivePrompt.split("\\s+".toRegex()).take(5).joinToString(" ")
                 } else {
-                    // 3. Save final AI message to Firestore
-                    val finalAiText = responseBuilder.toString()
-                    if (finalAiText.isNotBlank() && uid != null && activeSessionId != null) {
-                        try {
-                            val finalAiMessage = ChatMessage(
-                                role = "ai",
-                                text = finalAiText,
-                                timestamp = System.currentTimeMillis()
+                    "New Image Chat"
+                }
+                activeSessionId = repository.createNewSession(uid, sessionTitle)
+                _uiState.update { it.copy(currentSessionId = activeSessionId) }
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Failed to create session in Firestore", e)
+            }
+        }
+
+        // Save user message to Firestore
+        val userMessage = _uiState.value.messages.lastOrNull { it.role == "user" }
+        if (uid != null && activeSessionId != null && userMessage != null) {
+            try {
+                repository.saveMessage(uid, activeSessionId, userMessage)
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Failed to save user message to Firestore", e)
+            }
+        }
+
+        // Award fixed XP reward (+10 XP) for successfully prompting the AI
+        if (uid != null) {
+            try {
+                gamificationRepository.addXp(uid, 10)
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Failed to award XP for chat prompt", e)
+            }
+        }
+
+        try {
+            // Collect streaming text chunks directly as Flow<String> (with optional image)
+            OpenAIApiClient.askQuestion(effectivePrompt, base64ToSend)
+                .collect { chunkText ->
+                    // Strip asterisks so raw Markdown doesn't leak into the UI
+                    val cleanDelta = chunkText.replace("*", "")
+                    if (cleanDelta.isEmpty()) return@collect
+
+                    responseBuilder.append(cleanDelta)
+                    val accumulatedText = responseBuilder.toString()
+
+                    if (isFirstChunk) {
+                        isFirstChunk = false
+                        // First token received: dismiss the thinking spinner and append the AI bubble
+                        val aiMessage = ChatMessage(
+                            role = "ai",
+                            text = accumulatedText,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        _uiState.update { current ->
+                            current.copy(
+                                messages = current.messages + aiMessage,
+                                isLoading = false
                             )
-                            repository.saveMessage(uid, activeSessionId, finalAiMessage)
-                        } catch (e: Exception) {
-                            Log.e("ChatViewModel", "Failed to save AI message to Firestore", e)
+                        }
+                    } else {
+                        // Subsequent chunks: update the AI bubble text character-by-character
+                        _uiState.update { current ->
+                            if (current.messages.isEmpty()) return@update current
+                            val updatedList = current.messages.toMutableList()
+                            val lastIndex = updatedList.lastIndex
+                            updatedList[lastIndex] = updatedList[lastIndex].copy(text = accumulatedText)
+                            current.copy(messages = updatedList)
                         }
                     }
                 }
 
-            } catch (e: Exception) {
-                Log.e("OpenAI_Debug", "Streaming Error", e)
-                val errorText = "Debug Error: ${e.message ?: "Connection failed"}"
+            // If the stream finished without emitting any tokens
+            if (isFirstChunk) {
+                val emptyNotice = ChatMessage(
+                    role = "ai",
+                    text = "Sorry, I received an empty response. Please try again.",
+                    timestamp = System.currentTimeMillis()
+                )
                 _uiState.update { current ->
-                    if (isFirstChunk) {
-                        current.copy(
-                            messages = current.messages + ChatMessage(role = "ai", text = errorText),
-                            isLoading = false,
-                            errorMessage = errorText
+                    current.copy(
+                        messages = current.messages + emptyNotice,
+                        isLoading = false
+                    )
+                }
+            } else {
+                // Save final AI message to Firestore
+                val finalAiText = responseBuilder.toString()
+                if (finalAiText.isNotBlank() && uid != null && activeSessionId != null) {
+                    try {
+                        val finalAiMessage = ChatMessage(
+                            role = "ai",
+                            text = finalAiText,
+                            timestamp = System.currentTimeMillis()
                         )
-                    } else {
-                        current.copy(
-                            isLoading = false,
-                            errorMessage = errorText
-                        )
+                        repository.saveMessage(uid, activeSessionId, finalAiMessage)
+                    } catch (e: Exception) {
+                        Log.e("ChatViewModel", "Failed to save AI message to Firestore", e)
                     }
                 }
-            } finally {
-                isStreaming = false
-                _uiState.update { it.copy(isLoading = false) }
             }
+
+        } catch (e: Exception) {
+            Log.e("OpenAI_Debug", "Streaming Error", e)
+            val errorText = "Debug Error: ${e.message ?: "Connection failed"}"
+            _uiState.update { current ->
+                if (isFirstChunk) {
+                    current.copy(
+                        messages = current.messages + ChatMessage(role = "ai", text = errorText),
+                        isLoading = false,
+                        errorMessage = errorText
+                    )
+                } else {
+                    current.copy(
+                        isLoading = false,
+                        errorMessage = errorText
+                    )
+                }
+            }
+        } finally {
+            isStreaming = false
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 

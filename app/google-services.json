@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "701154361729",
-    "project_id": "studymentor-f3e36",
-    "storage_bucket": "studymentor-f3e36.firebasestorage.app"
+    "project_number": "989742019193",
+    "project_id": "studymentorbtecbestcode",
+    "storage_bucket": "studymentorbtecbestcode.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:701154361729:android:196b242da7f9dab5022880",
+        "mobilesdk_app_id": "1:989742019193:android:1b8b9f430ccaca82871aa8",
         "android_client_info": {
           "package_name": "com.example.study_mentor"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCzI4F9b3gBC04b_j4GwYXw0YtgkCbF8Go"
+          "current_key": "AIzaSyB7sGzv_iryGN3xOh9lbD-hjQLVoPJTM8w"
         }
       ],
       "services": {

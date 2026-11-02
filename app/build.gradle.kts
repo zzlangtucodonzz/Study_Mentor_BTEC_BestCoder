@@ -86,4 +86,11 @@ dependencies {
 
     // Coil for asynchronous image loading in Jetpack Compose
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // CameraX dependencies (Core, Camera2, Lifecycle, View)
+    val cameraxVersion = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 }

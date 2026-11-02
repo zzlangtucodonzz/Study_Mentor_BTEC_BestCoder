@@ -8,29 +8,70 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryBlue,
-    secondary = SecondaryGreen,
-    background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E),
-    onPrimary = SurfaceWhite,
-    onSecondary = SurfaceWhite,
-    onBackground = SurfaceWhite,
-    onSurface = SurfaceWhite
+private val LightColorScheme = lightColorScheme(
+    primary = SoftOrangePrimaryLight,
+    onPrimary = SoftOrangeOnPrimaryLight,
+    primaryContainer = SoftOrangePrimaryContainerLight,
+    onPrimaryContainer = SoftOrangeOnPrimaryContainerLight,
+    inversePrimary = SoftOrangeInversePrimaryLight,
+    secondary = SoftOrangeSecondaryLight,
+    onSecondary = SoftOrangeOnSecondaryLight,
+    secondaryContainer = SoftOrangeSecondaryContainerLight,
+    onSecondaryContainer = SoftOrangeOnSecondaryContainerLight,
+    tertiary = SoftOrangeTertiaryLight,
+    onTertiary = SoftOrangeOnTertiaryLight,
+    tertiaryContainer = SoftOrangeTertiaryContainerLight,
+    onTertiaryContainer = SoftOrangeOnTertiaryContainerLight,
+    background = SoftOrangeBackgroundLight,
+    onBackground = SoftOrangeOnBackgroundLight,
+    surface = SoftOrangeSurfaceLight,
+    onSurface = SoftOrangeOnSurfaceLight,
+    surfaceVariant = SoftOrangeSurfaceVariantLight,
+    onSurfaceVariant = SoftOrangeOnSurfaceVariantLight,
+    surfaceTint = SoftOrangeSurfaceTintLight,
+    inverseSurface = SoftOrangeInverseSurfaceLight,
+    inverseOnSurface = SoftOrangeInverseOnSurfaceLight,
+    error = SoftOrangeErrorLight,
+    onError = SoftOrangeOnErrorLight,
+    errorContainer = SoftOrangeErrorContainerLight,
+    onErrorContainer = SoftOrangeOnErrorContainerLight,
+    outline = SoftOrangeOutlineLight,
+    outlineVariant = SoftOrangeOutlineVariantLight,
+    scrim = SoftOrangeScrimLight
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    secondary = SecondaryGreen,
-    background = BackgroundOffWhite,
-    surface = SurfaceWhite,
-    onPrimary = SurfaceWhite,
-    onSecondary = SurfaceWhite,
-    onBackground = TextDark,
-    onSurface = TextDark
+private val DarkColorScheme = darkColorScheme(
+    primary = SoftOrangePrimaryDark,
+    onPrimary = SoftOrangeOnPrimaryDark,
+    primaryContainer = SoftOrangePrimaryContainerDark,
+    onPrimaryContainer = SoftOrangeOnPrimaryContainerDark,
+    inversePrimary = SoftOrangeInversePrimaryDark,
+    secondary = SoftOrangeSecondaryDark,
+    onSecondary = SoftOrangeOnSecondaryDark,
+    secondaryContainer = SoftOrangeSecondaryContainerDark,
+    onSecondaryContainer = SoftOrangeOnSecondaryContainerDark,
+    tertiary = SoftOrangeTertiaryDark,
+    onTertiary = SoftOrangeOnTertiaryDark,
+    tertiaryContainer = SoftOrangeTertiaryContainerDark,
+    onTertiaryContainer = SoftOrangeOnTertiaryContainerDark,
+    background = SoftOrangeBackgroundDark,
+    onBackground = SoftOrangeOnBackgroundDark,
+    surface = SoftOrangeSurfaceDark,
+    onSurface = SoftOrangeOnSurfaceDark,
+    surfaceVariant = SoftOrangeSurfaceVariantDark,
+    onSurfaceVariant = SoftOrangeOnSurfaceVariantDark,
+    surfaceTint = SoftOrangeSurfaceTintDark,
+    inverseSurface = SoftOrangeInverseSurfaceDark,
+    inverseOnSurface = SoftOrangeInverseOnSurfaceDark,
+    error = SoftOrangeErrorDark,
+    onError = SoftOrangeOnErrorDark,
+    errorContainer = SoftOrangeErrorContainerDark,
+    onErrorContainer = SoftOrangeOnErrorContainerDark,
+    outline = SoftOrangeOutlineDark,
+    outlineVariant = SoftOrangeOutlineVariantDark,
+    scrim = SoftOrangeScrimDark
 )
 
 @Composable
